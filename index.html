@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Interactive Planner</title>
+<title>Upcoming Planner</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   @keyframes fade-in { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
@@ -13,10 +13,9 @@
 </head>
 <body class="bg-gradient-to-br from-sky-100 to-indigo-200 min-h-screen flex flex-col items-center p-6">
 
-<h1 class="text-4xl font-bold mb-4 text-indigo-700">📅 My Year Planner</h1>
+<h1 class="text-4xl font-bold mb-4 text-indigo-700">📅 My Upcoming Planner</h1>
 
 <div class="flex items-center gap-4 mb-6">
-  <button id="prevYear" class="bg-indigo-500 text-white px-4 py-2 rounded-xl hover:bg-indigo-600">← Prev</button>
   <h2 id="yearLabel" class="text-2xl font-semibold text-indigo-700"></h2>
   <button id="nextYear" class="bg-indigo-500 text-white px-4 py-2 rounded-xl hover:bg-indigo-600">Next →</button>
 </div>
@@ -56,7 +55,6 @@ const colorInput = document.getElementById("colorInput");
 const saveBtn = document.getElementById("saveBtn");
 const closeBtn = document.getElementById("closeBtn");
 const yearLabel = document.getElementById("yearLabel");
-const prevYearBtn = document.getElementById("prevYear");
 const nextYearBtn = document.getElementById("nextYear");
 
 const monthZoom = document.getElementById("monthZoom");
@@ -68,34 +66,52 @@ let editingIndex = null;
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
+// Compute upcoming months (Oct-Dec + Jan-Apr)
+function getUpcomingMonths() {
+  const today = new Date();
+  const monthIndex = today.getMonth();
+  const result = [];
+  for (let i = monthIndex; i < 12; i++) result.push(i); // current month to Dec
+  for (let i = 0; i <= 3; i++) result.push(i); // Jan-Apr next year
+  return result;
+}
+
 function renderYear(year) {
   calendarContainer.innerHTML = "";
   yearLabel.textContent = year;
 
-  months.forEach((month, monthIndex) => {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  const upcomingMonths = getUpcomingMonths();
+  upcomingMonths.forEach(monthIndex => {
+    let displayYear = year;
+    if (monthIndex <= 3 && monthIndex < today.getMonth()) displayYear = year + 1;
+
     const monthDiv = document.createElement("div");
     monthDiv.className = "bg-white shadow-xl rounded-2xl p-4 cursor-pointer hover:scale-105 transition-all";
-    monthDiv.onclick = () => openMonthZoom(monthIndex, year);
+    monthDiv.onclick = () => openMonthZoom(monthIndex, displayYear);
 
     const title = document.createElement("h3");
-    title.textContent = month;
+    title.textContent = `${months[monthIndex]} ${displayYear}`;
     title.className = "text-xl font-semibold text-indigo-700 mb-3";
     monthDiv.appendChild(title);
 
     const grid = document.createElement("div");
     grid.className = "grid grid-cols-7 gap-1 text-sm";
 
-    const firstDay = new Date(year, monthIndex, 1);
-    const lastDay = new Date(year, monthIndex + 1, 0);
+    const firstDay = new Date(displayYear, monthIndex, 1);
+    const lastDay = new Date(displayYear, monthIndex + 1, 0);
     const startDay = firstDay.getDay();
     const totalDays = lastDay.getDate();
 
     for (let i = 0; i < startDay; i++) grid.appendChild(document.createElement("div"));
 
     for (let day = 1; day <= totalDays; day++) {
-      const dateStr = `${year}-${String(monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      const dateStr = `${displayYear}-${String(monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
       const cell = document.createElement("div");
       cell.className = "p-2 rounded-xl hover:bg-indigo-50 transition-all";
+      if (dateStr === todayStr) cell.classList.add("bg-yellow-200"); // Highlight today
 
       const num = document.createElement("div");
       num.textContent = day;
@@ -120,7 +136,7 @@ function renderYear(year) {
   });
 }
 
-// Month zoom
+// Month zoom and day event list
 function openMonthZoom(monthIndex, year) {
   const firstDay = new Date(year, monthIndex, 1);
   const lastDay = new Date(year, monthIndex + 1, 0);
@@ -137,12 +153,16 @@ function openMonthZoom(monthIndex, year) {
   const grid = document.createElement("div");
   grid.className = "grid grid-cols-7 gap-1 text-sm";
 
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
   for (let i = 0; i < startDay; i++) grid.appendChild(document.createElement("div"));
 
   for (let day = 1; day <= totalDays; day++) {
     const dateStr = `${year}-${String(monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     const cell = document.createElement("div");
     cell.className = "p-3 rounded-xl bg-white shadow hover:bg-indigo-50 cursor-pointer transition-all";
+    if (dateStr === todayStr) cell.classList.add("bg-yellow-200");
 
     const num = document.createElement("div");
     num.textContent = day;
@@ -166,7 +186,6 @@ function openMonthZoom(monthIndex, year) {
   monthZoom.classList.remove("hidden");
 }
 
-// Day event list modal
 function openDayEvents(dateStr) {
   const dayEvents = events.filter(e => e.date === dateStr);
   zoomContent.innerHTML = "";
@@ -224,7 +243,6 @@ function openDayEvents(dateStr) {
 
 // Modal functions
 function openModal(dateStr) {
-  selectedDate = dateStr;
   editingIndex = null;
   titleInput.value = "";
   descInput.value = "";
@@ -242,15 +260,14 @@ function openModal(dateStr) {
     events.push(newEvent);
     localStorage.setItem("plannerEvents", JSON.stringify(events));
     renderYear(currentYear);
-    if (!monthZoom.classList.contains("hidden")) openMonthZoom(new Date(dateInput.value).getMonth(), currentYear);
-    closeModal();
+    if (!monthZoom.classList.contains("hidden")) openMonthZoom(new Date(dateInput.value).getMonth(), new Date(dateInput.value).getFullYear());
+    modal.classList.add("hidden");
   };
 }
 
 function openEditModal(idx) {
   const ev = events[idx];
   editingIndex = idx;
-  selectedDate = ev.date;
   titleInput.value = ev.title;
   descInput.value = ev.desc;
   dateInput.value = ev.date;
@@ -266,8 +283,8 @@ function openEditModal(idx) {
     };
     localStorage.setItem("plannerEvents", JSON.stringify(events));
     renderYear(currentYear);
-    openMonthZoom(new Date(dateInput.value).getMonth(), currentYear);
-    closeModal();
+    openMonthZoom(new Date(dateInput.value).getMonth(), new Date(dateInput.value).getFullYear());
+    modal.classList.add("hidden");
   };
 }
 
@@ -275,7 +292,7 @@ function deleteEvent(idx, dateStr) {
   events.splice(idx, 1);
   localStorage.setItem("plannerEvents", JSON.stringify(events));
   renderYear(currentYear);
-  openMonthZoom(new Date(dateStr).getMonth(), currentYear);
+  openMonthZoom(new Date(dateStr).getMonth(), new Date(dateStr).getFullYear());
 }
 
 // Close modals
@@ -283,7 +300,6 @@ closeBtn.onclick = () => modal.classList.add("hidden");
 monthZoom.onclick = () => monthZoom.classList.add("hidden");
 
 // Year navigation
-prevYearBtn.onclick = () => { currentYear--; renderYear(currentYear); };
 nextYearBtn.onclick = () => { currentYear++; renderYear(currentYear); };
 
 // Initial render
