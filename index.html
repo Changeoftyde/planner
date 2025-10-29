@@ -9,6 +9,7 @@
   @keyframes fade-in { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
   .animate-fade-in { animation: fade-in 0.25s ease-out; }
   .month-zoom { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.2); overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:2rem; z-index:50; }
+  .completed { opacity: 0.5; text-decoration: line-through; }
 </style>
 </head>
 <body class="bg-gradient-to-br from-sky-100 to-indigo-200 min-h-screen flex flex-col items-center p-6">
@@ -56,30 +57,28 @@ const saveBtn = document.getElementById("saveBtn");
 const closeBtn = document.getElementById("closeBtn");
 const yearLabel = document.getElementById("yearLabel");
 const nextYearBtn = document.getElementById("nextYear");
-
 const monthZoom = document.getElementById("monthZoom");
 const zoomContent = document.getElementById("zoomContent");
 
 let events = JSON.parse(localStorage.getItem("plannerEvents") || "[]");
 let currentYear = new Date().getFullYear();
 let editingIndex = null;
+let hideCompleted = false;
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-// Compute upcoming months (Oct-Dec + Jan-Apr)
 function getUpcomingMonths() {
   const today = new Date();
   const monthIndex = today.getMonth();
   const result = [];
-  for (let i = monthIndex; i < 12; i++) result.push(i); // current month to Dec
-  for (let i = 0; i <= 3; i++) result.push(i); // Jan-Apr next year
+  for (let i = monthIndex; i < 12; i++) result.push(i);
+  for (let i = 0; i <= 3; i++) result.push(i);
   return result;
 }
 
 function renderYear(year) {
   calendarContainer.innerHTML = "";
   yearLabel.textContent = year;
-
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
@@ -87,7 +86,6 @@ function renderYear(year) {
   upcomingMonths.forEach(monthIndex => {
     let displayYear = year;
     if (monthIndex <= 3 && monthIndex < today.getMonth()) displayYear = year + 1;
-
     const monthDiv = document.createElement("div");
     monthDiv.className = "bg-white shadow-xl rounded-2xl p-4 cursor-pointer hover:scale-105 transition-all";
     monthDiv.onclick = () => openMonthZoom(monthIndex, displayYear);
@@ -111,17 +109,17 @@ function renderYear(year) {
       const dateStr = `${displayYear}-${String(monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
       const cell = document.createElement("div");
       cell.className = "p-2 rounded-xl hover:bg-indigo-50 transition-all";
-      if (dateStr === todayStr) cell.classList.add("bg-yellow-200"); // Highlight today
+      if (dateStr === todayStr) cell.classList.add("bg-yellow-200");
 
       const num = document.createElement("div");
       num.textContent = day;
       num.className = "font-semibold text-indigo-700 text-center";
       cell.appendChild(num);
 
-      const dayEvents = events.filter(e => e.date === dateStr);
+      const dayEvents = events.filter(e => e.date === dateStr && (!hideCompleted || !e.completed));
       dayEvents.forEach(ev => {
         const tag = document.createElement("div");
-        tag.className = "mt-1 text-white text-xs rounded px-2 py-1 truncate text-center";
+        tag.className = `mt-1 text-white text-xs rounded px-2 py-1 truncate text-center ${ev.completed ? "opacity-50 line-through" : ""}`;
         tag.style.backgroundColor = ev.color;
         tag.textContent = ev.title;
         cell.appendChild(tag);
@@ -136,28 +134,29 @@ function renderYear(year) {
   });
 }
 
-// Month zoom and day event list
 function openMonthZoom(monthIndex, year) {
-  const firstDay = new Date(year, monthIndex, 1);
-  const lastDay = new Date(year, monthIndex + 1, 0);
-  const totalDays = lastDay.getDate();
-  const startDay = firstDay.getDay();
-
   zoomContent.innerHTML = "";
-
   const monthTitle = document.createElement("h2");
   monthTitle.textContent = `${months[monthIndex]} ${year}`;
   monthTitle.className = "text-2xl font-bold mb-4 text-indigo-700";
   zoomContent.appendChild(monthTitle);
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.textContent = hideCompleted ? "Show Completed" : "Hide Completed";
+  toggleBtn.className = "mb-4 bg-gray-300 px-4 py-2 rounded-xl hover:bg-gray-400";
+  toggleBtn.onclick = () => { hideCompleted = !hideCompleted; openMonthZoom(monthIndex, year); };
+  zoomContent.appendChild(toggleBtn);
 
   const grid = document.createElement("div");
   grid.className = "grid grid-cols-7 gap-1 text-sm";
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
+  const firstDay = new Date(year, monthIndex, 1);
+  const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+  const startDay = firstDay.getDay();
 
   for (let i = 0; i < startDay; i++) grid.appendChild(document.createElement("div"));
-
   for (let day = 1; day <= totalDays; day++) {
     const dateStr = `${year}-${String(monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     const cell = document.createElement("div");
@@ -169,10 +168,10 @@ function openMonthZoom(monthIndex, year) {
     num.className = "font-semibold text-indigo-700 text-center";
     cell.appendChild(num);
 
-    const dayEvents = events.filter(e => e.date === dateStr);
+    const dayEvents = events.filter(e => e.date === dateStr && (!hideCompleted || !e.completed));
     dayEvents.forEach(ev => {
       const tag = document.createElement("div");
-      tag.className = "mt-1 text-white text-xs rounded px-2 py-1 truncate text-center";
+      tag.className = `mt-1 text-white text-xs rounded px-2 py-1 truncate text-center ${ev.completed ? "opacity-50 line-through" : ""}`;
       tag.style.backgroundColor = ev.color;
       tag.textContent = ev.title;
       cell.appendChild(tag);
@@ -198,9 +197,9 @@ function openDayEvents(dateStr) {
   const list = document.createElement("div");
   list.className = "flex flex-col gap-3 mb-4";
 
-  dayEvents.forEach((ev, idx) => {
+  dayEvents.forEach(ev => {
     const evDiv = document.createElement("div");
-    evDiv.className = "bg-white p-3 rounded-xl shadow flex justify-between items-center";
+    evDiv.className = `bg-white p-3 rounded-xl shadow flex justify-between items-center ${ev.completed ? "completed" : ""}`;
 
     const info = document.createElement("div");
     const title = document.createElement("div");
@@ -213,20 +212,24 @@ function openDayEvents(dateStr) {
     info.appendChild(desc);
 
     const controls = document.createElement("div");
+
     const editBtn = document.createElement("button");
     editBtn.textContent = "Edit";
     editBtn.className = "bg-indigo-500 text-white px-2 py-1 rounded mr-2 hover:bg-indigo-600";
-    editBtn.onclick = (e) => { e.stopPropagation(); openEditModal(idx); };
+    editBtn.onclick = (e) => { e.stopPropagation(); openEditModal(ev); };
+
+    const completeBtn = document.createElement("button");
+    completeBtn.textContent = ev.completed ? "Undo" : "Complete";
+    completeBtn.className = "bg-green-500 text-white px-2 py-1 rounded mr-2 hover:bg-green-600";
+    completeBtn.onclick = (e) => { e.stopPropagation(); toggleComplete(ev); };
 
     const delBtn = document.createElement("button");
     delBtn.textContent = "Delete";
     delBtn.className = "bg-rose-500 text-white px-2 py-1 rounded hover:bg-rose-600";
-    delBtn.onclick = (e) => { e.stopPropagation(); deleteEvent(idx, dateStr); };
+    delBtn.onclick = (e) => { e.stopPropagation(); deleteEvent(ev); };
 
-    controls.appendChild(editBtn);
-    controls.appendChild(delBtn);
-    evDiv.appendChild(info);
-    evDiv.appendChild(controls);
+    controls.append(editBtn, completeBtn, delBtn);
+    evDiv.append(info, controls);
     list.appendChild(evDiv);
   });
 
@@ -237,11 +240,8 @@ function openDayEvents(dateStr) {
   addBtn.className = "bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700";
   addBtn.onclick = () => openModal(dateStr);
   zoomContent.appendChild(addBtn);
-
-  monthZoom.classList.remove("hidden");
 }
 
-// Modal functions
 function openModal(dateStr) {
   editingIndex = null;
   titleInput.value = "";
@@ -251,23 +251,15 @@ function openModal(dateStr) {
   modal.classList.remove("hidden");
 
   saveBtn.onclick = () => {
-    const newEvent = {
-      title: titleInput.value,
-      date: dateInput.value,
-      desc: descInput.value,
-      color: colorInput.value
-    };
+    const newEvent = { title: titleInput.value, date: dateInput.value, desc: descInput.value, color: colorInput.value, completed: false };
     events.push(newEvent);
-    localStorage.setItem("plannerEvents", JSON.stringify(events));
-    renderYear(currentYear);
-    if (!monthZoom.classList.contains("hidden")) openMonthZoom(new Date(dateInput.value).getMonth(), new Date(dateInput.value).getFullYear());
+    saveAndRender(dateInput.value);
     modal.classList.add("hidden");
   };
 }
 
-function openEditModal(idx) {
-  const ev = events[idx];
-  editingIndex = idx;
+function openEditModal(ev) {
+  editingIndex = events.indexOf(ev);
   titleInput.value = ev.title;
   descInput.value = ev.desc;
   dateInput.value = ev.date;
@@ -275,34 +267,31 @@ function openEditModal(idx) {
   modal.classList.remove("hidden");
 
   saveBtn.onclick = () => {
-    events[idx] = {
-      title: titleInput.value,
-      date: dateInput.value,
-      desc: descInput.value,
-      color: colorInput.value
-    };
-    localStorage.setItem("plannerEvents", JSON.stringify(events));
-    renderYear(currentYear);
-    openMonthZoom(new Date(dateInput.value).getMonth(), new Date(dateInput.value).getFullYear());
+    events[editingIndex] = { ...ev, title: titleInput.value, desc: descInput.value, date: dateInput.value, color: colorInput.value };
+    saveAndRender(dateInput.value);
     modal.classList.add("hidden");
   };
 }
 
-function deleteEvent(idx, dateStr) {
-  events.splice(idx, 1);
+function toggleComplete(ev) {
+  ev.completed = !ev.completed;
+  saveAndRender(ev.date);
+}
+
+function deleteEvent(ev) {
+  events = events.filter(e => e !== ev);
+  saveAndRender(ev.date);
+}
+
+function saveAndRender(dateStr) {
   localStorage.setItem("plannerEvents", JSON.stringify(events));
   renderYear(currentYear);
   openMonthZoom(new Date(dateStr).getMonth(), new Date(dateStr).getFullYear());
 }
 
-// Close modals
 closeBtn.onclick = () => modal.classList.add("hidden");
 monthZoom.onclick = () => monthZoom.classList.add("hidden");
-
-// Year navigation
 nextYearBtn.onclick = () => { currentYear++; renderYear(currentYear); };
-
-// Initial render
 renderYear(currentYear);
 </script>
 </body>
